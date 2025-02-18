@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -40,7 +41,10 @@ import (
 
 const PluginType = "ros_addrlist"
 
+var timeout = ""
+
 func init() {
+	timeout = os.Getenv("ROS_ADDRESS_LIST_TIMEOUT")
 	sequence.MustRegExecQuickSetup(PluginType, QuickSetup)
 }
 
@@ -104,6 +108,11 @@ func (p *rosAddrlistPlugin) addIPViaHTTPRequest(ip *net.IP, v6 bool, from string
 		"list":    p.args.AddrList,
 		"comment": "[mosdns] domain: " + from,
 	}
+
+	if len(timeout) > 0 {
+		payload["timeout"] = timeout
+	}
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal json data: %w", err)
@@ -155,7 +164,7 @@ func (p *rosAddrlistPlugin) addIP(r *dns.Msg) error {
 			}
 			if err := p.addIPViaHTTPRequest(&rr.AAAA, true, r.Question[0].Name); err != nil {
 				fmt.Printf("failed to add ip: %s, %v\n", rr.AAAA, err)
-                                return err
+				return err
 			}
 		default:
 			continue
