@@ -9,4 +9,9 @@ FROM alpine:latest
 
 COPY --from=builder /root/src/mosdns /usr/bin/
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates \
+    && mkdir /etc/mosdns
+
+VOLUME /etc/mosdns
+EXPOSE 53/udp 53/tcp
+CMD /usr/bin/mosdns start --dir /etc/mosdns
