@@ -90,7 +90,7 @@ func (p *rosAddrlistPlugin) Exec(ctx context.Context, qCtx *query_context.Contex
 	r := qCtx.R()
 	if r != nil {
 		if err := p.addIP(r); err != nil {
-			fmt.Printf("ros_addrlist addip failed but ignored: %w", err)
+			fmt.Printf("ros_addrlist addip failed but ignored: %v", err)
 		}
 	}
 	return nil
