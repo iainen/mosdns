@@ -16,6 +16,8 @@ func parseRosTimeout(t string) time.Duration {
 		if r < '0' || r > '9' {
 			value, _ := strconv.Atoi(num)
 			switch v {
+			case "w":
+				d += time.Duration(value) * time.Hour * 24 * 7
 			case "d":
 				d += time.Duration(value) * time.Hour * 24
 			case "h":
