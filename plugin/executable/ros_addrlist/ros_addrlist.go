@@ -87,8 +87,6 @@ type Args struct {
 	Server          string        `yaml:"server"`
 	User            string        `yaml:"user"`
 	Passwd          string        `yaml:"passwd"`
-	Mask4           int           `yaml:"mask4"` // default 24
-	Mask6           int           `yaml:"mask6"` // default 32
 	Timeout         string        `yaml:"timeout"`
 	TimeoutInterval time.Duration `yaml:"-"` // default time.Second * 1000
 }
@@ -100,13 +98,6 @@ type rosAddrlistPlugin struct {
 }
 
 func newRosAddrlistPlugin(args *Args) (*rosAddrlistPlugin, error) {
-	if args.Mask4 == 0 {
-		args.Mask4 = 24
-	}
-	if args.Mask6 == 0 {
-		args.Mask6 = 32
-	}
-
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		IdleConnTimeout: 30 * time.Second,
@@ -340,43 +331,29 @@ func (p *rosAddrlistPlugin) Close() error {
 }
 
 // QuickSetup format: [set_name,{inet|inet6},mask] *2
-// e.g. "http://192.168.111.1:8080,admin,password,gfwlist,inet,24,1d"
+// e.g. "http://192.168.111.1:8080,admin,password,gfwlist,1d"
 func QuickSetup(_ sequence.BQ, s string) (any, error) {
 	fs := strings.Fields(s)
-	if len(fs) > 7 {
-		return nil, fmt.Errorf("expect no more than 7 fields, got %d", len(fs))
+	if len(fs) > 5 {
+		return nil, fmt.Errorf("expect no more than 5 fields, got %d", len(fs))
 	}
 
 	args := new(Args)
 	for _, argsStr := range fs {
 		ss := strings.Split(argsStr, ",")
-		if len(ss) != 7 {
-			return nil, fmt.Errorf("invalid args, expect 7 fields, got %d", len(ss))
+		if len(ss) != 5 {
+			return nil, fmt.Errorf("invalid args, expect 5 fields, got %d", len(ss))
 		}
-
-		m, err := strconv.Atoi(ss[5])
-		if err != nil {
-			return nil, fmt.Errorf("invalid mask, %w", err)
-		}
-		args.Mask4 = m
 
 		args.Server = ss[0]
 		args.User = ss[1]
 		args.Passwd = ss[2]
 		args.AddrList = ss[3]
-		args.Timeout = ss[6]
+		args.Timeout = ss[4]
 		args.TimeoutInterval = DefaultTimeoutInterval
 		interval := parseRosTimeout(args.Timeout)
 		if interval > 0 {
 			args.TimeoutInterval = interval
-		}
-		switch ss[4] {
-		case "inet":
-			args.Mask4 = m
-		case "inet6":
-			args.Mask6 = m
-		default:
-			return nil, fmt.Errorf("invalid set family, %s", ss[0])
 		}
 	}
 	return newRosAddrlistPlugin(args)
