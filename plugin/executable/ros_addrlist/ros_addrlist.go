@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/IrineSistiana/mosdns/v5/pkg/cache"
+	"github.com/IrineSistiana/mosdns/v5/plugin/executable/sleep"
 	"net"
 	"strconv"
 	"strings"
@@ -54,40 +55,13 @@ func init() {
 	sequence.MustRegExecQuickSetup(PluginType, QuickSetup)
 }
 
-func parseRosTimeout(t string) time.Duration {
-	d := time.Duration(0)
-	if len(t) == 0 {
-		return d
-	}
-	num := ""
-	for _, r := range t {
-		v := string(r)
-		if r < '0' || r > '9' {
-			value, _ := strconv.Atoi(num)
-			switch v {
-			case "d":
-				d += time.Duration(value) * time.Hour * 24
-			case "h":
-				d += time.Duration(value) * time.Hour
-			case "m":
-				d += time.Duration(value) * time.Minute
-			case "s":
-				d += time.Duration(value) * time.Second
-			}
-			num = ""
-		} else {
-			num += v
-		}
-	}
-	return d
-}
-
 type Args struct {
 	AddrList        string        `yaml:"addrlist"`
 	Server          string        `yaml:"server"`
 	User            string        `yaml:"user"`
 	Passwd          string        `yaml:"passwd"`
 	Timeout         string        `yaml:"timeout"`
+	Delay           uint          `yaml:"delay"`
 	TimeoutInterval time.Duration `yaml:"-"` // default time.Second * 1000
 }
 
@@ -95,6 +69,7 @@ type rosAddrlistPlugin struct {
 	args   *Args
 	client *http.Client
 	c      *cache.Cache[key, string]
+	s      *sleep.Sleep
 }
 
 func newRosAddrlistPlugin(args *Args) (*rosAddrlistPlugin, error) {
@@ -107,26 +82,27 @@ func newRosAddrlistPlugin(args *Args) (*rosAddrlistPlugin, error) {
 		Timeout:   time.Second * 2,
 		Transport: tr,
 	}
+	s := sleep.New(sleep.Args{Duration: args.Delay})
 	c := cache.New[key, string](cache.Opts{Size: DefaultSize})
 	return &rosAddrlistPlugin{
 		args:   args,
 		client: client,
 		c:      c,
+		s:      s,
 	}, nil
 }
 
 func (p *rosAddrlistPlugin) Exec(ctx context.Context, qCtx *query_context.Context) error {
 	r := qCtx.R()
 	if r != nil {
-		if err := p.addIP(r); err != nil {
+		if err := p.addIP(ctx, r); err != nil {
 			fmt.Printf("ros_addrlist addip failed but ignored: %v\n", err)
 		}
 	}
 	return nil
 }
 
-func (p *rosAddrlistPlugin) addIPViaHTTPRequest(ip *net.IP, v6 bool, from string) (*rosAddResponse, error) {
-	// request to add ips via http request routeros RESTFul API
+func (p *rosAddrlistPlugin) addIPViaHTTPRequest(ctx context.Context, ip *net.IP, v6 bool, from string) (*rosAddResponse, error) {
 	t := "ip"
 	if v6 {
 		t = "ipv6"
@@ -147,7 +123,7 @@ func (p *rosAddrlistPlugin) addIPViaHTTPRequest(ip *net.IP, v6 bool, from string
 		return nil, fmt.Errorf("failed to marshal json data: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", routerURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", routerURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http request: %w", err)
 	}
@@ -184,8 +160,7 @@ func (p *rosAddrlistPlugin) addIPViaHTTPRequest(ip *net.IP, v6 bool, from string
 	return respData, nil
 }
 
-func (p *rosAddrlistPlugin) getIPViaHTTPRequest(ip *net.IP, v6 bool) (*rosGetResponse, error) {
-	// request to add ips via http request routeros RESTFul API
+func (p *rosAddrlistPlugin) getIPViaHTTPRequest(ctx context.Context, ip *net.IP, v6 bool) (*rosGetResponse, error) {
 	t := "ip"
 	if v6 {
 		t = "ipv6"
@@ -200,7 +175,7 @@ func (p *rosAddrlistPlugin) getIPViaHTTPRequest(ip *net.IP, v6 bool) (*rosGetRes
 		return nil, fmt.Errorf("failed to marshal json data: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", routerURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", routerURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http request: %w", err)
 	}
@@ -226,8 +201,7 @@ func (p *rosAddrlistPlugin) getIPViaHTTPRequest(ip *net.IP, v6 bool) (*rosGetRes
 	return respData[0], nil
 }
 
-func (p *rosAddrlistPlugin) updateTimeoutViaHTTPRequest(id string, v6 bool) error {
-	// request to add ips via http request routeros RESTFul API
+func (p *rosAddrlistPlugin) updateTimeoutViaHTTPRequest(ctx context.Context, id string, v6 bool) error {
 	t := "ip"
 	if v6 {
 		t = "ipv6"
@@ -244,7 +218,7 @@ func (p *rosAddrlistPlugin) updateTimeoutViaHTTPRequest(id string, v6 bool) erro
 		return fmt.Errorf("failed to marshal json data: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", routerURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", routerURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create http request: %w", err)
 	}
@@ -263,7 +237,7 @@ func (p *rosAddrlistPlugin) updateTimeoutViaHTTPRequest(id string, v6 bool) erro
 	return nil
 }
 
-func (p *rosAddrlistPlugin) addIP(r *dns.Msg) error {
+func (p *rosAddrlistPlugin) addIP(ctx context.Context, r *dns.Msg) error {
 	for i := range r.Answer {
 		switch rr := r.Answer[i].(type) {
 		case *dns.A:
@@ -277,7 +251,7 @@ func (p *rosAddrlistPlugin) addIP(r *dns.Msg) error {
 			id, _, ok := p.c.Get(key(rr.A.String()))
 			if ok {
 				go func() {
-					err := p.updateTimeoutViaHTTPRequest(id, false)
+					err := p.updateTimeoutViaHTTPRequest(ctx, id, false)
 					if err != nil {
 						fmt.Printf("failed to update timeout: %s, %v\n", rr.A, err)
 						return
@@ -286,10 +260,10 @@ func (p *rosAddrlistPlugin) addIP(r *dns.Msg) error {
 				}()
 				return nil
 			}
-			respData, err := p.addIPViaHTTPRequest(&rr.A, false, r.Question[0].Name)
+			respData, err := p.addIPViaHTTPRequest(ctx, &rr.A, false, r.Question[0].Name)
 			if errors.Is(err, ErrAlreadyExists) {
 				go func() {
-					getRespData, err := p.getIPViaHTTPRequest(&rr.A, false)
+					getRespData, err := p.getIPViaHTTPRequest(ctx, &rr.A, false)
 					if err != nil {
 						fmt.Printf("failed to get ip: %s, %v\n", rr.A, err)
 						return
@@ -300,11 +274,14 @@ func (p *rosAddrlistPlugin) addIP(r *dns.Msg) error {
 				return nil
 			}
 			if err != nil {
-				fmt.Printf("failed to add ip: %s, %v\n", rr.A, err)
-				return err
+				return fmt.Errorf("failed to add ip: %s, %v\n", rr.A, err)
 			}
 			p.c.Store(key(rr.A.String()), respData.Ret, time.Now().Add(p.args.TimeoutInterval))
-
+			err = p.s.Exec(ctx, nil)
+			if err != nil {
+				return fmt.Errorf("failed to sleep exec: %s, %v\n", rr.A, err)
+			}
+			return nil
 		case *dns.AAAA:
 			if len(p.args.AddrList) == 0 {
 				continue
@@ -313,10 +290,9 @@ func (p *rosAddrlistPlugin) addIP(r *dns.Msg) error {
 			if !ok {
 				return fmt.Errorf("invalid AAAA record with ip: %s", rr.AAAA)
 			}
-			_, err := p.addIPViaHTTPRequest(&rr.AAAA, true, r.Question[0].Name)
+			_, err := p.addIPViaHTTPRequest(ctx, &rr.AAAA, true, r.Question[0].Name)
 			if err != nil {
-				fmt.Printf("failed to add ip: %s, %v\n", rr.AAAA, err)
-				return err
+				return fmt.Errorf("failed to add ip: %s, %v\n", rr.AAAA, err)
 			}
 		default:
 			continue
@@ -331,7 +307,7 @@ func (p *rosAddrlistPlugin) Close() error {
 }
 
 // QuickSetup format: [set_name,{inet|inet6},mask] *2
-// e.g. "http://192.168.111.1:8080,admin,password,gfwlist,1d"
+// e.g. "http://192.168.111.1:8080,admin,password,gfwlist,1d,50"
 func QuickSetup(_ sequence.BQ, s string) (any, error) {
 	fs := strings.Fields(s)
 	if len(fs) > 5 {
@@ -345,11 +321,17 @@ func QuickSetup(_ sequence.BQ, s string) (any, error) {
 			return nil, fmt.Errorf("invalid args, expect 5 fields, got %d", len(ss))
 		}
 
+		delay, err := strconv.Atoi(ss[5])
+		if err != nil {
+			return nil, fmt.Errorf("invalid args, delay err, got %s, err %s", ss[5], err.Error())
+		}
+
 		args.Server = ss[0]
 		args.User = ss[1]
 		args.Passwd = ss[2]
 		args.AddrList = ss[3]
 		args.Timeout = ss[4]
+		args.Delay = uint(delay)
 		args.TimeoutInterval = DefaultTimeoutInterval
 		interval := parseRosTimeout(args.Timeout)
 		if interval > 0 {

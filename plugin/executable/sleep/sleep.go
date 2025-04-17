@@ -40,7 +40,7 @@ func init() {
 	// You can also register a plugin object directly. (If plugin do not need to configure)
 	// Then you can directly use "_sleep_500ms" in configuration file.
 	coremain.RegNewPersetPluginFunc("_sleep_500ms", func(bp *coremain.BP) (any, error) {
-		return &sleep{d: time.Millisecond * 500}, nil
+		return &Sleep{d: time.Millisecond * 500}, nil
 	})
 
 	// You can register a quick setup func for sequence. So that users can
@@ -54,15 +54,15 @@ type Args struct {
 	Duration uint `yaml:"duration"` // (milliseconds) duration for sleep.
 }
 
-var _ sequence.Executable = (*sleep)(nil)
+var _ sequence.Executable = (*Sleep)(nil)
 
-// sleep implements handler.ExecutablePlugin.
-type sleep struct {
+// Sleep implements handler.ExecutablePlugin.
+type Sleep struct {
 	d time.Duration
 }
 
 // Exec implements handler.Executable.
-func (s *sleep) Exec(ctx context.Context, qCtx *query_context.Context) error {
+func (s *Sleep) Exec(ctx context.Context, qCtx *query_context.Context) error {
 	if s.d > 0 {
 		timer := pool.GetTimer(s.d)
 		defer pool.ReleaseTimer(timer)
@@ -77,7 +77,7 @@ func (s *sleep) Exec(ctx context.Context, qCtx *query_context.Context) error {
 
 func Init(_ *coremain.BP, args any) (any, error) {
 	d := args.(*Args).Duration
-	return &sleep{
+	return &Sleep{
 		d: time.Duration(d) * time.Millisecond,
 	}, nil
 }
@@ -87,5 +87,11 @@ func QuickSetup(_ sequence.BQ, s string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sleep{d: time.Duration(n) * time.Millisecond}, nil
+	return &Sleep{d: time.Duration(n) * time.Millisecond}, nil
+}
+
+func New(args Args) *Sleep {
+	return &Sleep{
+		d: time.Duration(args.Duration) * time.Millisecond,
+	}
 }
