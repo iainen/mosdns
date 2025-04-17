@@ -310,15 +310,15 @@ func (p *rosAddrlistPlugin) Close() error {
 // e.g. "http://192.168.111.1:8080,admin,password,gfwlist,1d,50"
 func QuickSetup(_ sequence.BQ, s string) (any, error) {
 	fs := strings.Fields(s)
-	if len(fs) > 5 {
-		return nil, fmt.Errorf("expect no more than 5 fields, got %d", len(fs))
+	if len(fs) > 6 {
+		return nil, fmt.Errorf("expect no more than 6 fields, got %d", len(fs))
 	}
 
 	args := new(Args)
 	for _, argsStr := range fs {
 		ss := strings.Split(argsStr, ",")
-		if len(ss) != 5 {
-			return nil, fmt.Errorf("invalid args, expect 5 fields, got %d", len(ss))
+		if len(ss) != 6 {
+			return nil, fmt.Errorf("invalid args, expect 6 fields, got %d", len(ss))
 		}
 
 		delay, err := strconv.Atoi(ss[5])
