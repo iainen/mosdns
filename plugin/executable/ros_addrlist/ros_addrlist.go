@@ -251,9 +251,10 @@ func (p *rosAddrlistPlugin) addIP(ctx context.Context, r *dns.Msg) error {
 			id, _, ok := p.c.Get(key(rr.A.String()))
 			if ok {
 				go func() {
-					err := p.updateTimeoutViaHTTPRequest(ctx, id, false)
+					err := p.updateTimeoutViaHTTPRequest(context.Background(), id, false)
 					if err != nil {
 						fmt.Printf("failed to update timeout: %s, %v\n", rr.A, err)
+						p.c.Del(key(rr.A.String()))
 						return
 					}
 					p.c.Store(key(rr.A.String()), id, time.Now().Add(p.args.TimeoutInterval))
@@ -263,7 +264,7 @@ func (p *rosAddrlistPlugin) addIP(ctx context.Context, r *dns.Msg) error {
 			respData, err := p.addIPViaHTTPRequest(ctx, &rr.A, false, r.Question[0].Name)
 			if errors.Is(err, ErrAlreadyExists) {
 				go func() {
-					getRespData, err := p.getIPViaHTTPRequest(ctx, &rr.A, false)
+					getRespData, err := p.getIPViaHTTPRequest(context.Background(), &rr.A, false)
 					if err != nil {
 						fmt.Printf("failed to get ip: %s, %v\n", rr.A, err)
 						return

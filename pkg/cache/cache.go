@@ -98,6 +98,14 @@ func (c *Cache[K, V]) Get(key K) (v V, expirationTime time.Time, ok bool) {
 	return
 }
 
+func (c *Cache[K, V]) Del(key K) {
+	if _, hasEntry := c.m.Get(key); hasEntry {
+		c.m.Del(key)
+		return
+	}
+	return
+}
+
 // Range calls f through all entries. If f returns an error, the same error will be returned
 // by Range.
 func (c *Cache[K, V]) Range(f func(key K, v V, expirationTime time.Time) error) error {
