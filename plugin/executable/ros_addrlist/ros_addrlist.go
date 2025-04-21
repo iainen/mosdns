@@ -259,7 +259,7 @@ func (p *rosAddrlistPlugin) addIP(ctx context.Context, r *dns.Msg) error {
 					}
 					p.c.Store(key(rr.A.String()), id, time.Now().Add(p.args.TimeoutInterval))
 				}()
-				return nil
+				continue
 			}
 			respData, err := p.addIPViaHTTPRequest(ctx, &rr.A, false, r.Question[0].Name)
 			if errors.Is(err, ErrAlreadyExists) {
@@ -272,7 +272,7 @@ func (p *rosAddrlistPlugin) addIP(ctx context.Context, r *dns.Msg) error {
 					fmt.Printf("get exist addr id: %s, addr: %s, timeout: %s\n", getRespData.Id, getRespData.Address, getRespData.Timeout)
 					p.c.Store(key(rr.A.String()), getRespData.Id, time.Now().Add(parseRosTimeout(getRespData.Timeout)))
 				}()
-				return nil
+				continue
 			}
 			if err != nil {
 				return fmt.Errorf("failed to add ip: %s, %v\n", rr.A, err)
@@ -282,7 +282,6 @@ func (p *rosAddrlistPlugin) addIP(ctx context.Context, r *dns.Msg) error {
 			if err != nil {
 				return fmt.Errorf("failed to sleep exec: %s, %v\n", rr.A, err)
 			}
-			return nil
 		case *dns.AAAA:
 			if len(p.args.AddrList) == 0 {
 				continue
